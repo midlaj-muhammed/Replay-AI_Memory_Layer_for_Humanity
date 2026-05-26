@@ -2,6 +2,13 @@
 
 > Semantic search over your terminal history. Never re-derive a fix you've already found.
 
+[![PyPI version](https://img.shields.io/pypi/v/replay-ai)](https://pypi.org/project/replay-ai/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Tests](https://img.shields.io/badge/tests-149%20passed-brightgreen)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**[Website](https://replay-ai-memory-layer-for-humanity.vercel.app)** | **[PyPI](https://pypi.org/project/replay-ai/)** | **[GitHub](https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity)**
+
 ```
 $ replay search "how did I fix Docker"
 Found 3 matches for "how did I fix Docker":
@@ -53,7 +60,7 @@ atuin history list
 ### 2. Install Replay
 
 ```bash
-# From PyPI (once published)
+# From PyPI
 pip install replay-ai
 
 # From source (development)
@@ -206,8 +213,8 @@ Replay Stats
 
 ```bash
 # Clone and install
-git clone <repo-url>
-cd replay
+git clone https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity.git
+cd Replay-AI_Memory_Layer_for_Humanity/replay
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
