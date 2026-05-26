@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replay — AI Memory Layer for Your Terminal</title>
+<meta name="description" content="Semantic search over your terminal history. Find past commands by meaning, not exact match. Powered by Atuin + Jina AI + FAISS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #111118;
+    --bg-card: #16161e;
+    --bg-terminal: #0d0d14;
+    --border: #1e1e2a;
+    --border-glow: #2a2a3a;
+    --text-primary: #e8e8ed;
+    --text-secondary: #8888a0;
+    --text-muted: #555570;
+    --accent: #7c6aef;
+    --accent-light: #9d8ff5;
+    --accent-dim: #4a3db8;
+    --green: #4ade80;
+    --green-dim: #22c55e;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --cyan: #22d3ee;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── Nav ─────────────────────────── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  nav .logo {
+    font-family: var(--font-mono); font-weight: 600; font-size: 1.1rem;
+    color: var(--text-primary);
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  nav .logo span.dot { color: var(--accent); }
+  nav .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+  nav .nav-links a {
+    color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;
+    font-weight: 450; transition: color 0.2s;
+  }
+  nav .nav-links a:hover { color: var(--text-primary); }
+  nav .nav-links .btn-gh {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding: 0.4rem 0.9rem; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-secondary); font-size: 0.8rem; font-weight: 500;
+    transition: all 0.2s; text-decoration: none;
+  }
+  nav .nav-links .btn-gh:hover { border-color: var(--border-glow); color: var(--text-primary); }
+  nav .nav-links .btn-gh svg { width: 16px; height: 16px; }
+
+  /* ── Hero ─────────────────────────── */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 8rem 2rem 4rem;
+    position: relative;
+    text-align: center;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(124,106,239,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.35rem 1rem; border-radius: 100px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.8rem; font-weight: 450;
+    margin-bottom: 2rem;
+  }
+  .hero-badge .pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+  .hero h1 {
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 700; letter-spacing: -0.03em; line-height: 1.1;
+    max-width: 750px; margin-bottom: 1.5rem;
+  }
+  .hero h1 .accent { color: var(--accent-light); }
+  .hero .subtitle {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    color: var(--text-secondary); max-width: 560px;
+    line-height: 1.7; margin-bottom: 2.5rem;
+  }
+  .hero-actions {
+    display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 3.5rem;
+  }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.75rem 1.5rem; border-radius: 8px;
+    background: var(--accent); color: #fff;
+    font-size: 0.9rem; font-weight: 600; text-decoration: none;
+    transition: all 0.2s; border: none; cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.75rem 1.5rem; border-radius: 8px;
+    background: var(--bg-card); color: var(--text-primary);
+    border: 1px solid var(--border);
+    font-size: 0.9rem; font-weight: 500; text-decoration: none;
+    transition: all 0.2s; cursor: pointer;
+  }
+  .btn-secondary:hover { border-color: var(--border-glow); }
+
+  /* ── Terminal mockup ──────────────── */
+  .terminal {
+    width: 100%; max-width: 680px;
+    background: var(--bg-terminal);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    text-align: left;
+    box-shadow: 0 0 80px rgba(124,106,239,0.06), 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .terminal-bar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0.75rem 1rem;
+    background: rgba(22,22,30,0.8);
+    border-bottom: 1px solid var(--border);
+  }
+  .terminal-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .terminal-bar .dot.r { background: #ff5f57; }
+  .terminal-bar .dot.y { background: #febc2e; }
+  .terminal-bar .dot.g { background: #28c840; }
+  .terminal-bar .title {
+    margin-left: auto; margin-right: auto;
+    font-size: 0.75rem; color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .terminal-body {
+    padding: 1.25rem 1.5rem;
+    font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.9;
+  }
+  .terminal-body .prompt { color: var(--accent-light); }
+  .terminal-body .cmd { color: var(--text-primary); }
+  .terminal-body .output { color: var(--text-secondary); }
+  .terminal-body .highlight { color: var(--green); }
+  .terminal-body .dim { color: var(--text-muted); }
+  .terminal-body .cyan { color: var(--cyan); }
+  .terminal-body .cursor {
+    display: inline-block; width: 8px; height: 16px;
+    background: var(--accent); animation: blink 1s step-end infinite;
+    vertical-align: text-bottom; margin-left: 2px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── Sections ─────────────────────── */
+  section { padding: 6rem 2rem; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .section-label {
+    font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500;
+    color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 1rem;
+  }
+  .section-title {
+    font-size: clamp(1.75rem, 4vw, 2.75rem);
+    font-weight: 700; letter-spacing: -0.02em; line-height: 1.2;
+    margin-bottom: 1rem;
+  }
+  .section-desc {
+    font-size: 1.05rem; color: var(--text-secondary);
+    max-width: 600px; line-height: 1.7;
+  }
+
+  /* ── How it works ─────────────────── */
+  .how-it-works { border-top: 1px solid var(--border); }
+  .steps {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem; margin-top: 3rem;
+  }
+  .step {
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-card);
+    transition: border-color 0.3s;
+  }
+  .step:hover { border-color: var(--border-glow); }
+  .step-num {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+    color: var(--accent); margin-bottom: 0.75rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .step-num::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .step h3 {
+    font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem;
+  }
+  .step p {
+    font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6;
+  }
+
+  /* ── Features grid ────────────────── */
+  .features { border-top: 1px solid var(--border); }
+  .features-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem; margin-top: 3rem;
+  }
+  .feature-card {
+    padding: 2rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-card);
+    transition: all 0.3s;
+  }
+  .feature-card:hover {
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 30px rgba(124,106,239,0.05);
+  }
+  .feature-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: rgba(124,106,239,0.1);
+    border: 1px solid rgba(124,106,239,0.15);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 1.25rem; font-size: 1.2rem;
+  }
+  .feature-card h3 {
+    font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;
+  }
+  .feature-card p {
+    font-size: 0.875rem; color: var(--text-secondary); line-height: 1.65;
+  }
+
+  /* ── Code showcase ────────────────── */
+  .showcase { border-top: 1px solid var(--border); }
+  .showcase-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1.5rem; margin-top: 3rem;
+  }
+  @media (max-width: 768px) {
+    .showcase-grid { grid-template-columns: 1fr; }
+  }
+  .showcase-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .showcase-card .card-header {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; color: var(--text-muted);
+    font-family: var(--font-mono);
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .showcase-card .card-header .icon { font-size: 1rem; }
+  .showcase-card pre {
+    padding: 1.25rem;
+    font-family: var(--font-mono); font-size: 0.78rem;
+    line-height: 1.85; overflow-x: auto;
+    color: var(--text-secondary);
+  }
+  .showcase-card pre .kw { color: var(--accent-light); }
+  .showcase-card pre .str { color: var(--green); }
+  .showcase-card pre .fn { color: var(--cyan); }
+  .showcase-card pre .cm { color: var(--text-muted); }
+  .showcase-card pre .op { color: var(--yellow); }
+
+  /* ── Stats bar ────────────────────── */
+  .stats {
+    border-top: 1px solid var(--border);
+    padding: 4rem 2rem;
+  }
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 2rem; text-align: center; max-width: 800px; margin: 0 auto;
+  }
+  .stat .num {
+    font-size: clamp(2rem, 4vw, 3rem); font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, var(--accent-light), var(--cyan));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .stat .label {
+    font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;
+    font-weight: 450;
+  }
+
+  /* ── Install section ──────────────── */
+  .install {
+    border-top: 1px solid var(--border);
+    padding: 5rem 2rem;
+    text-align: center;
+  }
+  .install-box {
+    max-width: 560px; margin: 2rem auto 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+  }
+  .install-box h3 {
+    font-size: 1rem; font-weight: 600; margin-bottom: 1rem;
+  }
+  .install-cmd {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: var(--bg-terminal);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1.25rem;
+    font-family: var(--font-mono); font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    position: relative;
+  }
+  .install-cmd .dollar { color: var(--accent-light); }
+  .install-cmd .copy-btn {
+    position: absolute; right: 0.75rem;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 0.75rem;
+    padding: 0.25rem 0.5rem; border-radius: 4px;
+    transition: all 0.2s;
+  }
+  .install-cmd .copy-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+  .install-box .req {
+    font-size: 0.78rem; color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .install-box .req a { color: var(--accent-light); text-decoration: none; }
+  .install-box .req a:hover { text-decoration: underline; }
+
+  /* ── Footer ───────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 3rem 2rem;
+    text-align: center;
+  }
+  footer .footer-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 1rem;
+  }
+  footer .copy { font-size: 0.8rem; color: var(--text-muted); }
+  footer .links { display: flex; gap: 1.5rem; }
+  footer .links a {
+    font-size: 0.8rem; color: var(--text-muted);
+    text-decoration: none; transition: color 0.2s;
+  }
+  footer .links a:hover { color: var(--text-secondary); }
+
+  /* ── Animations ───────────────────── */
+  .reveal {
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible {
+    opacity: 1; transform: translateY(0);
+  }
+
+  /* ── Responsive ───────────────────── */
+  @media (max-width: 640px) {
+    nav { padding: 0 1rem; }
+    .hero { padding: 6rem 1.25rem 3rem; }
+    section { padding: 4rem 1.25rem; }
+    .terminal-body { font-size: 0.72rem; padding: 1rem; }
+    .steps { grid-template-columns: 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Navigation ──────────────────── -->
+<nav>
+  <div class="logo">replay<span class="dot">.</span></div>
+  <div class="nav-links">
+    <a href="#how-it-works">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity" target="_blank" class="btn-gh">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────── -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="pulse"></span>
+    Codex AI Builder Hackathon 2026
+  </div>
+  <h1>Your terminal<br>has a <span class="accent">memory.</span></h1>
+  <p class="subtitle">
+    Replay gives you semantic search over your entire shell history.
+    Find past commands by meaning, not exact match. Stop re-googling
+    fixes you've already solved.
+  </p>
+  <div class="hero-actions">
+    <a href="#install" class="btn-primary">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v8m-3-3l3 3 3-3M2 12v2h12v-2"/></svg>
+      Install Replay
+    </a>
+    <a href="https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity" target="_blank" class="btn-secondary">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3L1 8l5 5M10 3l5 5-5 5"/></svg>
+      View Source
+    </a>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="title">terminal</span>
+    </div>
+    <div class="terminal-body">
+      <div><span class="prompt">❯ </span><span class="cmd">replay search "how did I fix that Docker build error"</span></div>
+      <br>
+      <div><span class="dim">Searching 526 commands across 226 sessions...</span></div>
+      <br>
+      <div><span class="highlight">1.</span> <span class="cmd">docker build -t app --no-cache .</span></div>
+      <div class="dim" style="padding-left: 1.5rem;">exit:0 | /home/dev/api | after: docker build . (exit:1)</div>
+      <br>
+      <div><span class="highlight">2.</span> <span class="cmd">docker build -t replay-api .</span></div>
+      <div class="dim" style="padding-left: 1.5rem;">exit:0 | /home/dev/projects/replay-api | session: a3f8...</div>
+      <br>
+      <div><span class="highlight">3.</span> <span class="cmd">docker exec -it api python manage.py migrate --fake-initial</span></div>
+      <div class="dim" style="padding-left: 1.5rem;">exit:0 | /home/dev/projects/replay-api | after: migrate (exit:1)</div>
+      <br>
+      <div><span class="cyan">Found 3 results in 0.12s</span><span class="cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── How it works ─────────────────── -->
+<section class="how-it-works" id="how-it-works">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">How it works</div>
+      <h2 class="section-title">Three steps to total recall</h2>
+      <p class="section-desc">
+        Replay captures, understands, and indexes your terminal history
+        so you can search it like a conversation.
+      </p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <h3>Capture</h3>
+        <p>Reads your shell history from Atuin — every command, timestamp, exit code, and directory. No output captured, just commands.</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">02</div>
+        <h3>Understand</h3>
+        <p>Embeds each command with Jina AI, clusters into sessions, detects fix patterns (fail then succeed), and filters secrets.</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">03</div>
+        <h3>Recall</h3>
+        <p>Indexes with FAISS for instant cosine-similarity search. Ask in natural language, get ranked results with full context.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ─────────────────────── -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Built for developers who forget</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F50D;</div>
+        <h3>Semantic search</h3>
+        <p>Ask in plain English. "How did I fix that nginx config?" returns the exact command sequence, ranked by meaning.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F527;</div>
+        <h3>Fix detection</h3>
+        <p>Automatically finds failure-then-success patterns. See how you solved problems before, not just what you ran.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F4C1;</div>
+        <h3>Session clustering</h3>
+        <p>Commands are grouped by session, directory, and time. Context before and after every result so you see the full picture.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F512;</div>
+        <h3>Secret filtering</h3>
+        <p>16 regex patterns catch API keys, tokens, and passwords before they reach the embedding API. Your secrets stay local.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x26A1;</div>
+        <h3>Instant results</h3>
+        <p>FAISS inner-product search over normalized vectors. Sub-second queries across thousands of commands.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F4E6;</div>
+        <h3>Zero config</h3>
+        <p>One command to install, one to search. Auto-detects Atuin DB, builds index on first run. Works with any shell.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Code showcase ────────────────── -->
+<section class="showcase" id="showcase">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">In action</div>
+      <h2 class="section-title">Nine commands. One memory layer.</h2>
+    </div>
+    <div class="showcase-grid">
+      <div class="showcase-card reveal">
+        <div class="card-header"><span class="icon">&#x1F4CA;</span> replay stats</div>
+        <pre><span class="cm"># Your terminal, quantified</span>
+<span class="kw">$</span> replay stats
+
+<span class="fn">Total commands:</span>    526
+<span class="fn">Total sessions:</span>    226
+<span class="fn">Fixes detected:</span>    38
+<span class="fn">Indexed chunks:</span>    246
+<span class="fn">Embedding model:</span>   jina-embeddings-v3
+<span class="fn">Index dimensions:</span>  1024</pre>
+      </div>
+      <div class="showcase-card reveal">
+        <div class="card-header"><span class="icon">&#x1F9E0;</span> replay fixes</div>
+        <pre><span class="cm"># See how you solved problems</span>
+<span class="kw">$</span> replay fixes
+
+<span class="str">'docker build .'</span> failed, then
+  <span class="fn">'docker build -t app --no-cache .'</span> succeeded
+
+<span class="str">'npm run build'</span> failed, then
+  <span class="fn">'npm run build:prod'</span> succeeded
+
+<span class="str">'git rebase main'</span> had conflicts, then
+  <span class="fn">'git rebase --continue'</span> resolved them
+
+<span class="op">Found 38 fix patterns</span></pre>
+      </div>
+      <div class="showcase-card reveal">
+        <div class="card-header"><span class="icon">&#x1F4DD;</span> replay search</div>
+        <pre><span class="cm"># Natural language queries</span>
+<span class="kw">$</span> replay search <span class="str">"deploy to kubernetes"</span>
+
+<span class="fn">1.</span> kubectl apply -f k8s/deployment.yaml
+   exit:0 | /home/dev/projects/replay
+
+<span class="fn">2.</span> kubectl set image deployment/replay-api \
+     replay-api=ghcr.io/replay/api:v0.2.1
+   exit:0 | /home/dev/projects/replay
+
+<span class="fn">3.</span> kubectl rollout status deployment/replay-api
+   exit:0 | /home/dev/projects/replay</pre>
+      </div>
+      <div class="showcase-card reveal">
+        <div class="card-header"><span class="icon">&#x1F4E4;</span> replay export</div>
+        <pre><span class="cm"># Export your memory</span>
+<span class="kw">$</span> replay export --format jsonl \
+    | jq <span class="str">'.command'</span>
+
+<span class="str">"git status"</span>
+<span class="str">"docker compose up -d"</span>
+<span class="str">"pytest tests/ -v --cov"</span>
+<span class="str">"kubectl get pods"</span>
+
+<span class="cm"># Pipe anywhere — your memory is portable</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Stats ────────────────────────── -->
+<section class="stats reveal">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="num">149</div>
+        <div class="label">Tests passing</div>
+      </div>
+      <div class="stat">
+        <div class="num">9</div>
+        <div class="label">CLI commands</div>
+      </div>
+      <div class="stat">
+        <div class="num">16</div>
+        <div class="label">Secret patterns</div>
+      </div>
+      <div class="stat">
+        <div class="num">1024</div>
+        <div class="label">Embedding dims</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Install ──────────────────────── -->
+<section class="install" id="install">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Get started</div>
+      <h2 class="section-title">Install in seconds</h2>
+      <p class="section-desc" style="margin: 0 auto 2rem;">
+        Replay is a Python CLI tool. Install via pip, then search your history.
+      </p>
+    </div>
+    <div class="install-box reveal">
+      <h3>Quick start</h3>
+      <div class="install-cmd">
+        <span class="dollar">$</span>
+        <span>pip install replay-ai</span>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('pip install replay-ai')">copy</button>
+      </div>
+      <div class="install-cmd">
+        <span class="dollar">$</span>
+        <span>replay init</span>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('replay init')">copy</button>
+      </div>
+      <div class="install-cmd">
+        <span class="dollar">$</span>
+        <span>replay search "docker fix"</span>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('replay search \"docker fix\"')">copy</button>
+      </div>
+      <p class="req">
+        Requires <a href="https://atuin.sh" target="_blank">Atuin</a> for shell history capture.
+        Embeddings via <a href="https://jina.ai" target="_blank">Jina AI</a> (free tier).
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ───────────────────────── -->
+<footer>
+  <div class="footer-inner">
+    <div class="copy">
+      Replay &mdash; AI Memory Layer for Humanity &middot; Built at Codex AI Builder Hackathon 2026
+    </div>
+    <div class="links">
+      <a href="https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity" target="_blank">GitHub</a>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
