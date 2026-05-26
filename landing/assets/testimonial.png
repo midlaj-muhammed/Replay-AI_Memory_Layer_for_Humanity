@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024' width='1024' height='1024'>
+  <defs>
+    <filter id='paper'>
+      <feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/>
+      <feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.16  0 0 0 0 0.12  0 0 0 0.07 0'/>
+    </filter>
+  </defs>
+  <!-- paper base -->
+  <rect width='1024' height='1024' fill='#efe7d2' />
+  <rect width='1024' height='1024' filter='url(#paper)' />
+  <!-- frame -->
+  <rect x='41' y='41' width='942' height='942' fill='none' stroke='rgba(21, 20, 15, 0.16)' stroke-dasharray='6 6' />
+  
+    <line x1='41' y1='41' x2='983' y2='983' stroke='#8b8676' stroke-opacity='0.22' stroke-width='1' />
+    <line x1='983' y1='41' x2='41' y2='983' stroke='#8b8676' stroke-opacity='0.22' stroke-width='1' />
+  
+  
+    <path d='M41 92 L41 41 L92 41' stroke='#8b8676' fill='none' stroke-width='1.5' />
+    <path d='M932 41 L983 41 L983 92' stroke='#8b8676' fill='none' stroke-width='1.5' />
+    <path d='M41 932 L41 983 L92 983' stroke='#8b8676' fill='none' stroke-width='1.5' />
+    <path d='M932 983 L983 983 L983 932' stroke='#8b8676' fill='none' stroke-width='1.5' />
+  
+  <!-- coral plate index, top-left -->
+  <text x='55' y='67' font-family='Inter Tight, system-ui, sans-serif' font-size='25' font-weight='600' letter-spacing='2' fill='#ed6f5c'>PLATE · TESTIMONIAL</text>
+  <!-- coordinates, top-right -->
+  <text x='969' y='67' text-anchor='end' font-family='JetBrains Mono, monospace' font-size='25' fill='#8b8676'>1024 × 1024 · 1:1</text>
+  <!-- centered title block -->
+  <text x='512' y='497.6' text-anchor='middle' font-family='Playfair Display, serif' font-style='italic' font-weight='500' font-size='72' fill='#15140f'>testimonial</text>
+  <text x='512' y='558.4' text-anchor='middle' font-family='Inter Tight, system-ui, sans-serif' font-size='29' letter-spacing='3' fill='#8b8676'>TESTIMONIAL.PNG — 1:1</text>
+  <!-- bottom slug -->
+  <text x='55' y='969' font-family='Inter Tight, system-ui, sans-serif' font-size='25' letter-spacing='2' fill='#8b8676'>REQUIRED · REKEY ON BRAND</text>
+  <text x='969' y='969' text-anchor='end' font-family='Inter Tight, system-ui, sans-serif' font-size='25' letter-spacing='2' fill='#8b8676'>OPEN DESIGN · ATELIER ZERO</text>
+</svg>
