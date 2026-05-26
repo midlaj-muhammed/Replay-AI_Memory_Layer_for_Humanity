@@ -57,7 +57,7 @@ atuin history list
 pip install replay-ai
 
 # From source (development)
-git clone <repo-url>
+git clone https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity.git
 cd replay
 pip install -e ".[dev]"
 ```
