@@ -92,7 +92,8 @@ class SearchIndex:
         # Normalize for cosine similarity via inner product
         faiss.normalize_L2(vectors)
 
-        self.index = faiss.IndexFlatIP(EMBEDDING_DIMENSIONS)
+        dim = vectors.shape[1]
+        self.index = faiss.IndexFlatIP(dim)
         self.index.add(vectors)
         self.metadata = list(metadata)
         self._loaded = True

@@ -9,7 +9,7 @@ from replay.capture.atuin import AtuinReader, Command
 from replay.config import ReplayConfig
 from replay.processing.chunker import Chunk, chunk_sessions
 from replay.processing.cluster import cluster_commands
-from replay.search.embedder import Embedder, EmbeddingError
+from replay.search.embedder import Embedder, EmbeddingError, local_embed, local_embed_batch
 from replay.search.index import SearchIndex, SearchResult, ChunkMetadata
 
 
@@ -18,100 +18,37 @@ class SearchError(Exception):
 
 
 def ensure_index(config: ReplayConfig) -> SearchIndex:
-    """Load or auto-build the search index.
-
-    If the index exists on disk, loads it. Otherwise, builds it from
-    Atuin history (equivalent to `replay init`).
-
-    Args:
-        config: Replay configuration.
-
-    Returns:
-        A loaded SearchIndex ready for queries.
-
-    Raises:
-        SearchError: If the API key is missing or building fails.
-    """
+    """Load or auto-build the search index."""
     index = SearchIndex(config.index_path)
 
     if index.exists():
         index.load()
         return index
 
-    # Auto-build
-    if not config.openai_api_key:
-        raise SearchError(
-            "No API key found.\n"
-            "Set JINA_API_KEY (free, recommended) or OPENAI_API_KEY:\n"
-            "  export JINA_API_KEY='your-key'  # https://jina.ai\n"
-            "  export OPENAI_API_KEY='sk-...'"
-        )
-
+    # Auto-build (uses local embeddings if no API key)
     return _build_index(config, index)
 
 
 def build_index(config: ReplayConfig) -> SearchIndex:
-    """Build a fresh search index from Atuin history.
-
-    Args:
-        config: Replay configuration.
-
-    Returns:
-        A newly built SearchIndex.
-
-    Raises:
-        SearchError: If the API key is missing or building fails.
-    """
-    if not config.openai_api_key:
-        raise SearchError(
-            "No API key found.\n"
-            "Set JINA_API_KEY (free, recommended) or OPENAI_API_KEY:\n"
-            "  export JINA_API_KEY='your-key'  # https://jina.ai\n"
-            "  export OPENAI_API_KEY='sk-...'"
-        )
-
+    """Build a fresh search index from Atuin history."""
     index = SearchIndex(config.index_path)
-    index.clear()  # Remove any stale index
+    index.clear()
     return _build_index(config, index)
 
 
 def refresh_index(config: ReplayConfig) -> tuple[SearchIndex, int]:
-    """Incrementally update the index with new commands.
-
-    Finds commands added since the last index build and adds only those.
-
-    Args:
-        config: Replay configuration.
-
-    Returns:
-        Tuple of (loaded index, number of new chunks added).
-
-    Raises:
-        SearchError: If the API key is missing, no index exists, or update fails.
-    """
-    if not config.openai_api_key:
-        raise SearchError(
-            "No API key found.\n"
-            "Set JINA_API_KEY (free, recommended) or OPENAI_API_KEY:\n"
-            "  export JINA_API_KEY='your-key'  # https://jina.ai\n"
-            "  export OPENAI_API_KEY='sk-...'"
-        )
-
+    """Incrementally update the index with new commands."""
     index = SearchIndex(config.index_path)
     if not index.exists():
-        raise SearchError(
-            "No index found. Run `replay init` first."
-        )
+        raise SearchError("No index found. Run `replay init` first.")
 
     index.load()
 
-    # Find the latest timestamp in the existing index
     if index.metadata:
         latest_ts = max(m.timestamp for m in index.metadata)
     else:
         latest_ts = 0
 
-    # Read all commands and filter to new ones
     db_path = config.atuin_db_path
     reader = AtuinReader(db_path)
     all_commands = reader.read_history()
@@ -120,24 +57,24 @@ def refresh_index(config: ReplayConfig) -> tuple[SearchIndex, int]:
     if not new_commands:
         return index, 0
 
-    # Cluster and chunk only new commands
     new_sessions = cluster_commands(new_commands)
     chunks = chunk_sessions(new_sessions)
 
     if not chunks:
         return index, 0
 
-    # Filter out chunks we already have (by timestamp)
     existing_ts = {m.timestamp for m in index.metadata}
     new_chunks = [c for c in chunks if c.timestamp not in existing_ts]
 
     if not new_chunks:
         return index, 0
 
-    # Embed and add
-    embedder = Embedder(api_key=config.openai_api_key, model=config.embedding_model, base_url=config.openai_base_url)
     texts = [c.chunk_text for c in new_chunks]
-    embeddings = embedder.embed_texts(texts)
+    if config.openai_api_key:
+        embedder = Embedder(api_key=config.openai_api_key, model=config.embedding_model, base_url=config.openai_base_url)
+        embeddings = embedder.embed_texts(texts)
+    else:
+        embeddings = local_embed_batch(texts)
 
     metadata = [
         ChunkMetadata(
@@ -179,8 +116,16 @@ def search_query(
     """
     index = ensure_index(config)
 
-    embedder = Embedder(api_key=config.openai_api_key, model=config.embedding_model, base_url=config.openai_base_url)
-    query_vector = embedder.embed_query(query)
+    if config.openai_api_key and config.openai_base_url is None:
+        # Only use API embedder when we have a key with no incompatible base URL
+        # (i.e. Jina key or direct OpenAI key, not a proxy gateway)
+        try:
+            embedder = Embedder(api_key=config.openai_api_key, model=config.embedding_model, base_url=config.openai_base_url)
+            query_vector = embedder.embed_query(query)
+        except (EmbeddingError, Exception):
+            query_vector = local_embed(query)
+    else:
+        query_vector = local_embed(query)
 
     results = index.search(query_vector, top_k=top_k * 3)  # Over-fetch for filtering
 
@@ -202,9 +147,12 @@ def _build_index(config: ReplayConfig, index: SearchIndex) -> SearchIndex:
     if not chunks:
         raise SearchError("No commands found to index.")
 
-    embedder = Embedder(api_key=config.openai_api_key, model=config.embedding_model, base_url=config.openai_base_url)
     texts = [c.chunk_text for c in chunks]
-    embeddings = embedder.embed_texts(texts)
+    if config.openai_api_key:
+        embedder = Embedder(api_key=config.openai_api_key, model=config.embedding_model, base_url=config.openai_base_url)
+        embeddings = embedder.embed_texts(texts)
+    else:
+        embeddings = local_embed_batch(texts)
 
     metadata = [
         ChunkMetadata(

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 from typing import List
 
+import numpy as np
 from openai import OpenAI
 
 from replay.processing.secret_filter import filter_secrets, filter_secrets_batch
@@ -17,9 +19,33 @@ RETRY_DELAY = 2.0  # seconds, doubles on each retry
 
 JINA_BASE_URL = "https://api.jina.ai/v1"
 
+# Model -> dimensions mapping
+MODEL_DIMENSIONS = {
+    "jina-embeddings-v3": 1024,
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+    "text-embedding-ada-002": 1536,
+}
+
 
 class EmbeddingError(Exception):
     """Raised when embedding fails after all retries."""
+
+
+def local_embed(text: str, dim: int = 1024) -> list[float]:
+    """Deterministic hash-based embedding for offline use. Same text → same vector."""
+    h = hashlib.sha512(text.encode()).digest()
+    raw = h * (dim // len(h) + 1)
+    vec = np.array([b / 255.0 * 2 - 1 for b in raw[:dim]], dtype=np.float32)
+    norm = np.linalg.norm(vec)
+    if norm > 0:
+        vec = vec / norm
+    return vec.tolist()
+
+
+def local_embed_batch(texts: list[str], dim: int = 1024) -> list[list[float]]:
+    """Batch version of local_embed."""
+    return [local_embed(t, dim) for t in texts]
 
 
 class Embedder:
@@ -27,9 +53,13 @@ class Embedder:
 
     def __init__(self, api_key: str, model: str = EMBEDDING_MODEL, base_url: str | None = None):
         kwargs: dict = {"api_key": api_key}
-        kwargs["base_url"] = base_url or JINA_BASE_URL
+        if base_url:
+            kwargs["base_url"] = base_url
+        elif model.startswith("jina"):
+            kwargs["base_url"] = JINA_BASE_URL
         self.client = OpenAI(**kwargs)
         self.model = model
+        self.dimensions = MODEL_DIMENSIONS.get(model, EMBEDDING_DIMENSIONS)
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """Embed a list of texts, automatically batching and filtering secrets.

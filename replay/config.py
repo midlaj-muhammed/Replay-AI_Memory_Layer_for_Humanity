@@ -53,12 +53,25 @@ class ReplayConfig:
 
         # Fallback to environment variables
         if not config.openai_api_key:
-            # Try JINA_API_KEY first (free), then OPENAI_API_KEY
-            config.openai_api_key = os.environ.get("JINA_API_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
+            jina_key = os.environ.get("JINA_API_KEY", "")
+            openai_key = os.environ.get("OPENAI_API_KEY", "")
+            if jina_key:
+                config.openai_api_key = jina_key
+            elif openai_key:
+                config.openai_api_key = openai_key
+                # Switch to OpenAI model/dimensions if using OpenAI key
+                if config.embedding_model == "jina-embeddings-v3":
+                    config.embedding_model = "text-embedding-3-small"
         if not config.openai_base_url:
+            jina_key = os.environ.get("JINA_API_KEY", "")
+            openai_key = os.environ.get("OPENAI_API_KEY", "")
             base_url = os.environ.get("OPENAI_BASE_URL", "")
-            if base_url:
+            if jina_key:
+                config.openai_base_url = None  # Embedder will use Jina URL
+            elif base_url:
                 config.openai_base_url = base_url
+            elif openai_key:
+                config.openai_base_url = None  # Use OpenAI default
 
         return config
 
