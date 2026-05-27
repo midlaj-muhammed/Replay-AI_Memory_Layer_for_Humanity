@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Replay — AI Memory Layer for Your Terminal</title>
-<meta name="description" content="Semantic search over your terminal history. Find past commands by meaning, not exact match. Powered by Atuin + Jina AI + FAISS.">
+<meta name="description" content="Semantic search over your terminal history. AI-powered command explanations. Works with bash, zsh, and Atuin.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -422,9 +422,9 @@
   </div>
   <h1>Your terminal<br>has a <span class="accent">memory.</span></h1>
   <p class="subtitle">
-    Replay gives you semantic search over your entire shell history.
-    Find past commands by meaning, not exact match. Stop re-googling
-    fixes you've already solved.
+    Replay gives you semantic search and AI-powered explanations over your entire shell history.
+    Find past commands by meaning, understand them with AI, and stop re-googling
+    fixes you've already solved. Works with bash, zsh, and Atuin.
   </p>
   <div class="hero-actions">
     <a href="#install" class="btn-primary">
@@ -476,12 +476,12 @@
       <div class="step reveal">
         <div class="step-num">01</div>
         <h3>Capture</h3>
-        <p>Reads your shell history from Atuin — every command, timestamp, exit code, and directory. No output captured, just commands.</p>
+        <p>Reads your shell history from bash, zsh, or Atuin — every command, timestamp, exit code, and directory. No output captured, just commands.</p>
       </div>
       <div class="step reveal">
         <div class="step-num">02</div>
         <h3>Understand</h3>
-        <p>Embeds each command with Jina AI, clusters into sessions, detects fix patterns (fail then succeed), and filters secrets.</p>
+        <p>Embeds each command with Jina AI, clusters into sessions, detects fix patterns, filters secrets, and explains commands with AI.</p>
       </div>
       <div class="step reveal">
         <div class="step-num">03</div>
@@ -526,9 +526,19 @@
         <p>FAISS inner-product search over normalized vectors. Sub-second queries across thousands of commands.</p>
       </div>
       <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F916;</div>
+        <h3>AI explanations</h3>
+        <p>Ask Replay to explain any command with AI. Includes context from your history for richer explanations.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#x1F4DD;</div>
+        <h3>Session summaries</h3>
+        <p>AI generates natural language summaries of your terminal sessions. See what you worked on, what broke, and how you fixed it.</p>
+      </div>
+      <div class="feature-card reveal">
         <div class="feature-icon">&#x1F4E6;</div>
-        <h3>Zero config</h3>
-        <p>One command to install, one to search. Auto-detects Atuin DB, builds index on first run. Works with any shell.</p>
+        <h3>No Atuin required</h3>
+        <p>Works directly with bash and zsh history files. Atuin optional for richer data. One command to install, one to search.</p>
       </div>
     </div>
   </div>
@@ -539,7 +549,7 @@
   <div class="container">
     <div class="reveal">
       <div class="section-label">In action</div>
-      <h2 class="section-title">Nine commands. One memory layer.</h2>
+      <h2 class="section-title">Twelve commands. One memory layer.</h2>
     </div>
     <div class="showcase-grid">
       <div class="showcase-card reveal">
@@ -586,17 +596,25 @@
    exit:0 | /home/dev/projects/replay</pre>
       </div>
       <div class="showcase-card reveal">
-        <div class="card-header"><span class="icon">&#x1F4E4;</span> replay export</div>
-        <pre><span class="cm"># Export your memory</span>
-<span class="kw">$</span> replay export --format jsonl \
-    | jq <span class="str">'.command'</span>
+        <div class="card-header"><span class="icon">&#x1F916;</span> replay explain</div>
+        <pre><span class="cm"># AI-powered command explanations</span>
+<span class="kw">$</span> replay explain <span class="str">"git rebase -i HEAD~3"</span> --context
 
-<span class="str">"git status"</span>
-<span class="str">"docker compose up -d"</span>
-<span class="str">"pytest tests/ -v --cov"</span>
-<span class="str">"kubectl get pods"</span>
+<span class="fn">Starts an interactive rebase of the last 3 commits.</span>
+<span class="fn">The -i flag opens your editor to reorder, squash,</span>
+<span class="fn">or edit commits. Based on your history, you've used</span>
+<span class="fn">this 12 times — typically after finishing a feature.</span></pre>
+      </div>
+      <div class="showcase-card reveal">
+        <div class="card-header"><span class="icon">&#x1F4DD;</span> replay summarize</div>
+        <pre><span class="cm"># AI session summaries</span>
+<span class="kw">$</span> replay summarize
 
-<span class="cm"># Pipe anywhere — your memory is portable</span></pre>
+<span class="fn">session summary</span> <span class="dim">/home/dev/api  8 cmds  15min</span>
+<span class="str">The developer was debugging a Docker networking</span>
+<span class="str">issue. They tried building the image, which failed</span>
+<span class="str">due to a missing dependency. After installing it</span>
+<span class="str">with apt, the build succeeded.</span></pre>
       </div>
     </div>
   </div>
@@ -607,11 +625,11 @@
   <div class="container">
     <div class="stats-grid">
       <div class="stat">
-        <div class="num">149</div>
+        <div class="num">160</div>
         <div class="label">Tests passing</div>
       </div>
       <div class="stat">
-        <div class="num">9</div>
+        <div class="num">12</div>
         <div class="label">CLI commands</div>
       </div>
       <div class="stat">
@@ -653,8 +671,15 @@
         <span>replay search "docker fix"</span>
         <button class="copy-btn" onclick="navigator.clipboard.writeText('replay search \"docker fix\"')">copy</button>
       </div>
+      <div class="install-cmd">
+        <span class="dollar">$</span>
+        <span>replay explain "git rebase -i HEAD~3" --context</span>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('replay explain \"git rebase -i HEAD~3\" --context')">copy</button>
+      </div>
       <p class="req">
-        Requires <a href="https://atuin.sh" target="_blank">Atuin</a> for shell history capture.
+        Works with <a href="https://www.gnu.org/software/bash/" target="_blank">bash</a>,
+        <a href="https://www.zsh.org/" target="_blank">zsh</a>, or
+        <a href="https://atuin.sh" target="_blank">Atuin</a>.
         Embeddings via <a href="https://jina.ai" target="_blank">Jina AI</a> (free tier).
       </p>
     </div>
