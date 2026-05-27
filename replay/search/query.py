@@ -36,8 +36,10 @@ def build_index(config: ReplayConfig) -> SearchIndex:
     return _build_index(config, index)
 
 
-def refresh_index(config: ReplayConfig) -> tuple[SearchIndex, int]:
+def refresh_index(config: ReplayConfig, source: str = "auto") -> tuple[SearchIndex, int]:
     """Incrementally update the index with new commands."""
+    from replay.capture.bash import read_history
+
     index = SearchIndex(config.index_path)
     if not index.exists():
         raise SearchError("No index found. Run `replay init` first.")
@@ -49,9 +51,7 @@ def refresh_index(config: ReplayConfig) -> tuple[SearchIndex, int]:
     else:
         latest_ts = 0
 
-    db_path = config.atuin_db_path
-    reader = AtuinReader(db_path)
-    all_commands = reader.read_history()
+    all_commands = read_history(source=source)
     new_commands = [c for c in all_commands if c.timestamp > latest_ts]
 
     if not new_commands:
@@ -135,11 +135,10 @@ def search_query(
     return filtered[:top_k]
 
 
-def _build_index(config: ReplayConfig, index: SearchIndex) -> SearchIndex:
-    """Internal: build index from Atuin history."""
-    db_path = config.atuin_db_path
-    reader = AtuinReader(db_path)
-    commands = reader.read_history()
+def _build_index(config: ReplayConfig, index: SearchIndex, source: str = "auto") -> SearchIndex:
+    """Internal: build index from history."""
+    from replay.capture.bash import read_history
+    commands = read_history(source=source)
 
     sessions = cluster_commands(commands)
     chunks = chunk_sessions(sessions)

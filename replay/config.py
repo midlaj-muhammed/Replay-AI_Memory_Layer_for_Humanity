@@ -10,6 +10,13 @@ from typing import Optional
 DEFAULT_CONFIG_PATH = Path.home() / ".replay" / "config.toml"
 DEFAULT_INDEX_PATH = Path.home() / ".replay" / "index"
 
+AVAILABLE_MODELS = {
+    "jina-embeddings-v3": {"dimensions": 1024, "provider": "Jina AI (free)"},
+    "text-embedding-3-small": {"dimensions": 1536, "provider": "OpenAI"},
+    "text-embedding-3-large": {"dimensions": 3072, "provider": "OpenAI"},
+    "text-embedding-ada-002": {"dimensions": 1536, "provider": "OpenAI (legacy)"},
+}
+
 
 @dataclass
 class ReplayConfig:
@@ -50,6 +57,8 @@ class ReplayConfig:
                     config.index_path = Path(replay_data["index_path"])
                 if "embedding_model" in replay_data:
                     config.embedding_model = replay_data["embedding_model"]
+                if "openai_base_url" in replay_data:
+                    config.openai_base_url = replay_data["openai_base_url"]
 
         # Fallback to environment variables
         if not config.openai_api_key:
@@ -74,6 +83,26 @@ class ReplayConfig:
                 config.openai_base_url = None  # Use OpenAI default
 
         return config
+
+    def save(self, config_path: Optional[Path] = None) -> None:
+        """Save config to TOML file."""
+        config_path = config_path or DEFAULT_CONFIG_PATH
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        lines = ["[replay]"]
+        if self.openai_api_key:
+            lines.append(f'openai_api_key = "{self.openai_api_key}"')
+        if self.openai_base_url:
+            lines.append(f'openai_base_url = "{self.openai_base_url}"')
+        if self.embedding_model != "jina-embeddings-v3":
+            lines.append(f'embedding_model = "{self.embedding_model}"')
+        if self.index_path != DEFAULT_INDEX_PATH:
+            lines.append(f'index_path = "{self.index_path}"')
+        if self.atuin_db_path:
+            lines.append(f'atuin_db_path = "{self.atuin_db_path}"')
+        lines.append("")
+
+        config_path.write_text("\n".join(lines))
 
     def validate_api_key(self) -> None:
         """Raise if no API key is configured."""

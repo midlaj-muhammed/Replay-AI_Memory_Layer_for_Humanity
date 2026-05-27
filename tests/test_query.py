@@ -65,14 +65,11 @@ class TestEnsureIndex:
         assert loaded.total_chunks == 1
 
     @patch("replay.search.query.Embedder")
-    @patch("replay.search.query.AtuinReader")
-    def test_auto_builds_when_missing(self, mock_reader_cls, mock_embedder_cls, tmp_path: Path):
+    @patch("replay.capture.bash.read_history")
+    def test_auto_builds_when_missing(self, mock_read_history, mock_embedder_cls, tmp_path: Path):
         """If index doesn't exist, should auto-build."""
-        # Mock Atuin reader
-        mock_reader = MagicMock()
-        mock_reader_cls.return_value = mock_reader
         from replay.capture.atuin import Command
-        mock_reader.read_history.return_value = [
+        mock_read_history.return_value = [
             Command(id="1", timestamp=1000, duration=0, exit_status=0,
                     command="git status", cwd="/dev", hostname="laptop", session="s1"),
         ]
@@ -89,22 +86,27 @@ class TestEnsureIndex:
         index = ensure_index(config)
         assert index.total_chunks == 1
 
-    def test_raises_on_missing_api_key(self, tmp_path: Path):
+    @patch("replay.capture.bash.read_history")
+    def test_auto_builds_with_local_embeddings(self, mock_read_history, tmp_path: Path):
+        """With no API key, should auto-build using local embeddings."""
+        from replay.capture.atuin import Command
+        mock_read_history.return_value = [
+            Command(id="1", timestamp=1000, duration=0, exit_status=0,
+                    command="git status", cwd="/dev", hostname="laptop", session="s1"),
+        ]
         config = ReplayConfig(index_path=tmp_path / "index", openai_api_key="")
-        with pytest.raises(SearchError, match="No API key found"):
-            ensure_index(config)
+        index = ensure_index(config)
+        assert index.total_chunks >= 1
 
 
 class TestBuildIndex:
     """Test explicit index build."""
 
     @patch("replay.search.query.Embedder")
-    @patch("replay.search.query.AtuinReader")
-    def test_builds_and_saves(self, mock_reader_cls, mock_embedder_cls, tmp_path: Path):
+    @patch("replay.capture.bash.read_history")
+    def test_builds_and_saves(self, mock_read_history, mock_embedder_cls, tmp_path: Path):
         from replay.capture.atuin import Command
-        mock_reader = MagicMock()
-        mock_reader_cls.return_value = mock_reader
-        mock_reader.read_history.return_value = [
+        mock_read_history.return_value = [
             Command(id="1", timestamp=1000, duration=0, exit_status=0,
                     command="git status", cwd="/dev", hostname="laptop", session="s1"),
             Command(id="2", timestamp=2000, duration=0, exit_status=1,
@@ -123,18 +125,24 @@ class TestBuildIndex:
         assert index.total_chunks >= 1
         assert index.exists()
 
-    def test_raises_without_api_key(self, tmp_path: Path):
+    @patch("replay.capture.bash.read_history")
+    def test_builds_with_local_embeddings(self, mock_read_history, tmp_path: Path):
+        from replay.capture.atuin import Command
+        mock_read_history.return_value = [
+            Command(id="1", timestamp=1000, duration=0, exit_status=0,
+                    command="git status", cwd="/dev", hostname="laptop", session="s1"),
+        ]
         config = ReplayConfig(index_path=tmp_path / "index", openai_api_key="")
-        with pytest.raises(SearchError, match="No API key found"):
-            build_index(config)
+        index = build_index(config)
+        assert index.total_chunks >= 1
 
 
 class TestRefreshIndex:
     """Test incremental index refresh."""
 
     @patch("replay.search.query.Embedder")
-    @patch("replay.search.query.AtuinReader")
-    def test_adds_new_commands(self, mock_reader_cls, mock_embedder_cls, tmp_path: Path):
+    @patch("replay.capture.bash.read_history")
+    def test_adds_new_commands(self, mock_read_history, mock_embedder_cls, tmp_path: Path):
         from replay.capture.atuin import Command
 
         # Build initial index with one chunk
@@ -151,9 +159,7 @@ class TestRefreshIndex:
         index.save()
 
         # Mock reader returning old + new commands
-        mock_reader = MagicMock()
-        mock_reader_cls.return_value = mock_reader
-        mock_reader.read_history.return_value = [
+        mock_read_history.return_value = [
             Command(id="1", timestamp=1000, duration=0, exit_status=0,
                     command="git status", cwd="/dev", hostname="laptop", session="s1"),
             Command(id="2", timestamp=2000, duration=0, exit_status=0,
@@ -177,10 +183,32 @@ class TestRefreshIndex:
         with pytest.raises(SearchError, match="No index found"):
             refresh_index(config)
 
-    def test_raises_without_api_key(self, tmp_path: Path):
-        config = ReplayConfig(index_path=tmp_path / "index", openai_api_key="")
-        with pytest.raises(SearchError, match="No API key found"):
-            refresh_index(config)
+    @patch("replay.capture.bash.read_history")
+    def test_refresh_with_local_embeddings(self, mock_read_history, tmp_path: Path):
+        from replay.capture.atuin import Command
+        # Build initial index
+        index_dir = tmp_path / "index"
+        index = SearchIndex(index_dir)
+        index.build(
+            [_fake_embedding(seed=0)],
+            [ChunkMetadata(
+                chunk_text="exit:0 | /dev | git status",
+                command="git status", exit_status=0, cwd="/dev",
+                timestamp=1000, session_id="s1",
+            )],
+        )
+        index.save()
+
+        # Add new commands
+        mock_read_history.return_value = [
+            Command(id="1", timestamp=1000, duration=0, exit_status=0,
+                    command="git status", cwd="/dev", hostname="laptop", session="s1"),
+            Command(id="2", timestamp=2000, duration=0, exit_status=0,
+                    command="docker build .", cwd="/dev", hostname="laptop", session="s1"),
+        ]
+        config = ReplayConfig(index_path=index_dir, openai_api_key="")
+        idx, added = refresh_index(config)
+        assert added >= 1
 
 
 class TestSearchQuery:
