@@ -130,6 +130,65 @@ replay stats --output json | jq '.index_chunks'
 replay explain "npm install" --output json | jq '.explanation'
 ```
 
+## Codex Integration
+
+Replay uses the **OpenAI Chat Completions API** to power its AI commands: `explain` and `summarize`. This gives you AI-generated explanations of any terminal command and natural language summaries of your sessions.
+
+### Setup
+
+You need an **OpenAI API key** for the AI commands (separate from the Jina key used for embeddings):
+
+```bash
+# Option 1: Environment variable
+export OPENAI_API_KEY="sk-your-key-here"
+
+# Option 2: Save to Replay config (recommended)
+replay config set api_key sk-your-key-here
+```
+
+If you only have a Jina key, semantic search still works — but `explain` and `summarize` will show an error asking for an OpenAI key.
+
+### What it does
+
+**`replay explain`** sends the command (with optional context from your history) to GPT-4o-mini and returns a concise explanation of what the command does, what the flags mean, and why it might have been used:
+
+```bash
+# Basic explanation
+replay explain "docker build -t app --no-cache ."
+
+# With context from your history (searches for similar past commands)
+replay explain "kubectl apply -f deployment.yaml" --context
+```
+
+**`replay summarize`** sends a session's command sequence to GPT-4o-mini and returns a natural language summary of what you were working on, what went wrong, and how you fixed it:
+
+```bash
+# Summarize the most recent session
+replay summarize
+
+# Summarize a specific session by index
+replay summarize --session 5
+
+# JSON output for scripting
+replay summarize --output json | jq '.summary'
+```
+
+### How it works
+
+1. Commands are filtered through the **secret redaction** layer (16 patterns) before being sent to the API
+2. The `explain --context` flag uses FAISS semantic search to find similar past commands and includes them in the prompt
+3. The `summarize` command detects fix patterns (failure-then-success) and includes them in the prompt
+4. Both commands use exponential backoff retry (3 attempts) on API failures
+5. The chat client reuses the same `openai_api_key` and `openai_base_url` config as the embedding client
+
+### Custom base URL
+
+If you're using an OpenAI-compatible proxy or a different provider:
+
+```bash
+replay config set base_url https://your-proxy.com/v1
+```
+
 ## How It Works
 
 ```
