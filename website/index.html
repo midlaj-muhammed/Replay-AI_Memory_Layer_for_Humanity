@@ -357,6 +357,13 @@
     background: linear-gradient(135deg, var(--accent-light), var(--cyan));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     background-clip: text;
+    transition: transform 0.3s ease;
+  }
+  .stat .num.counting {
+    transform: scale(1.05);
+  }
+  .stat .num.done {
+    transform: scale(1);
   }
   .stat .label {
     font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;
@@ -648,23 +655,23 @@
 </section>
 
 <!-- -- Stats -------------------------- -->
-<section class="stats reveal">
+<section class="stats" id="stats">
   <div class="container">
     <div class="stats-grid">
-      <div class="stat">
-        <div class="num">160</div>
+      <div class="stat reveal">
+        <div class="num" data-target="160">0</div>
         <div class="label">Tests passing</div>
       </div>
-      <div class="stat">
-        <div class="num">12</div>
+      <div class="stat reveal">
+        <div class="num" data-target="12">0</div>
         <div class="label">CLI commands</div>
       </div>
-      <div class="stat">
-        <div class="num">16</div>
+      <div class="stat reveal">
+        <div class="num" data-target="16">0</div>
         <div class="label">Secret patterns</div>
       </div>
-      <div class="stat">
-        <div class="num">1024</div>
+      <div class="stat reveal">
+        <div class="num" data-target="1024">0</div>
         <div class="label">Embedding dims</div>
       </div>
     </div>
@@ -729,7 +736,7 @@
 
 <script>
   // Scroll reveal
-  const observer = new IntersectionObserver((entries) => {
+  const revealObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.classList.add('visible');
@@ -737,7 +744,49 @@
     });
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 
-  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+  // Count-up animation for stats
+  function animateCount(el) {
+    const target = parseInt(el.dataset.target);
+    const duration = 1500; // ms
+    const start = performance.now();
+    el.classList.add('counting');
+
+    function update(now) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(eased * target);
+      el.textContent = current.toLocaleString();
+
+      if (progress < 1) {
+        requestAnimationFrame(update);
+      } else {
+        el.textContent = target.toLocaleString();
+        el.classList.remove('counting');
+        el.classList.add('done');
+      }
+    }
+    requestAnimationFrame(update);
+  }
+
+  const statsObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !entry.target.dataset.animated) {
+        entry.target.dataset.animated = 'true';
+        // Stagger each stat by 150ms
+        const nums = entry.target.querySelectorAll('.num[data-target]');
+        nums.forEach((num, i) => {
+          setTimeout(() => animateCount(num), i * 150);
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+
+  const statsSection = document.getElementById('stats');
+  if (statsSection) statsObserver.observe(statsSection);
 
   // Typing animation: remove border after animation completes
   const typingLine = document.querySelector('.typing-line');
