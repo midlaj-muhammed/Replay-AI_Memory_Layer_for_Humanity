@@ -188,3 +188,33 @@ def _format_timestamp(ts_ns: int) -> str:
     ts_s = ts_ns / 1_000_000_000
     dt = datetime.fromtimestamp(ts_s, tz=timezone.utc)
     return dt.strftime("%Y-%m-%d %H:%M")
+
+
+def render_explanation(command: str, explanation: str, exit_status: int = 0) -> None:
+    """Render an AI explanation of a command."""
+    title = Text()
+    title.append(" explain ", style="bold cyan")
+    title.append(f" {command}", style="bold")
+
+    body = Text()
+    if exit_status != 0:
+        body.append(f"exit:{exit_status} ", style="red")
+    body.append(explanation)
+
+    border = "green" if exit_status == 0 else "red"
+    console.print(Panel(body, title=title, border_style=border, padding=(0, 1)))
+
+
+def render_session_summary(summary: str, primary_cwd: str = "", command_count: int = 0, duration_s: float = 0) -> None:
+    """Render an AI session summary."""
+    title = Text()
+    title.append(" session summary ", style="bold cyan")
+    if primary_cwd:
+        title.append(f" {primary_cwd}", style="cyan")
+    if command_count:
+        title.append(f" {command_count} cmds", style="dim")
+    if duration_s:
+        mins = duration_s / 60
+        title.append(f" {mins:.0f}min", style="dim")
+
+    console.print(Panel(summary, title=title, border_style="cyan", padding=(0, 1)))

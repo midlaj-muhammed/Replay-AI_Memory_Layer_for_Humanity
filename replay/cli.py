@@ -15,8 +15,8 @@ from rich.table import Table
 
 from replay.capture.bash import ShellHistoryReader, detect_history_source, read_history
 from replay.config import ReplayConfig, AVAILABLE_MODELS
-from replay.display.plain import render_fixes_plain, render_search_results_plain, render_session_list_plain, render_sessions_plain
-from replay.display.tui import render_fixes, render_search_results, render_session_list, render_sessions_detail
+from replay.display.plain import render_explanation_plain, render_fixes_plain, render_search_results_plain, render_session_list_plain, render_session_summary_plain, render_sessions_plain
+from replay.display.tui import render_explanation, render_fixes, render_search_results, render_session_list, render_session_summary, render_sessions_detail
 from replay.processing.cluster import Session, cluster_commands
 from replay.processing.fix_detector import detect_fixes_all, Fix
 from replay.search.query import SearchError, build_index, refresh_index, search_query
@@ -612,6 +612,122 @@ def watch(
 
     except KeyboardInterrupt:
         console.print("\n[dim]Stopped watching.[/dim]")
+
+
+@app.command()
+def explain(
+    command: str = typer.Argument(..., help="Shell command to explain"),
+    context: bool = typer.Option(False, "--context", "-c", help="Include similar past commands as context"),
+    source: str = typer.Option("auto", "--source", "-s", help="History source: auto, atuin, bash, zsh, all"),
+    plain: bool = typer.Option(False, "--plain", help="Plain text output (no TUI)"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output format: json"),
+    limit: int = typer.Option(3, "--limit", "-n", help="Max context commands to include"),
+) -> None:
+    """Explain a shell command using AI."""
+    from replay.search.chat import Chat, ChatError
+
+    config = ReplayConfig.load()
+
+    if not config.openai_api_key:
+        err_console.print("[red]Error:[/red] No API key found.")
+        err_console.print("Set JINA_API_KEY or OPENAI_API_KEY, or run: replay config set api_key <key>")
+        raise typer.Exit(1)
+
+    # Gather context from similar past commands if requested
+    context_commands = None
+    if context:
+        try:
+            results = search_query(config, command, threshold=0.2, top_k=limit)
+            context_commands = [
+                {"command": r.metadata.command, "exit_status": r.metadata.exit_status, "cwd": r.metadata.cwd}
+                for r in results
+            ]
+        except Exception:
+            pass  # Context is optional, proceed without it
+
+    try:
+        chat = Chat(api_key=config.openai_api_key, model="gpt-4o-mini", base_url=config.openai_base_url)
+        explanation = chat.explain(command, context_commands=context_commands)
+    except ChatError as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+    if output == "json":
+        _output_json({"command": command, "explanation": explanation, "context_used": bool(context_commands)})
+    elif plain:
+        print(render_explanation_plain(command, explanation))
+    else:
+        render_explanation(command, explanation)
+
+
+@app.command()
+def summarize(
+    session: Optional[int] = typer.Option(None, "--session", "-S", help="Session index (default: most recent)"),
+    source: str = typer.Option("auto", "--source", "-s", help="History source: auto, atuin, bash, zsh, all"),
+    plain: bool = typer.Option(False, "--plain", help="Plain text output (no TUI)"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output format: json"),
+    db_path: Optional[str] = typer.Option(None, "--db", help="Custom history file/database path"),
+) -> None:
+    """Summarize a terminal session using AI."""
+    from replay.search.chat import Chat, ChatError
+
+    config = ReplayConfig.load()
+
+    if not config.openai_api_key:
+        err_console.print("[red]Error:[/red] No API key found.")
+        err_console.print("Set JINA_API_KEY or OPENAI_API_KEY, or run: replay config set api_key <key>")
+        raise typer.Exit(1)
+
+    commands = _get_commands(source, db_path)
+    sessions = cluster_commands(commands)
+
+    if not sessions:
+        err_console.print("[red]Error:[/red] No sessions found.")
+        raise typer.Exit(1)
+
+    if session is not None:
+        if session < 0 or session >= len(sessions):
+            err_console.print(f"[red]Error:[/red] Session index {session} out of range (0-{len(sessions)-1})")
+            raise typer.Exit(1)
+        target = sessions[session]
+    else:
+        target = sessions[-1]  # Most recent
+
+    # Detect fixes for this session
+    all_fixes = detect_fixes_all([target])
+    fix_dicts = [{"description": f.description} for f in all_fixes]
+
+    # Build command dicts
+    cmd_dicts = [
+        {"command": c.command, "exit_status": c.exit_status, "cwd": c.cwd}
+        for c in target.commands
+    ]
+
+    # Calculate duration
+    duration_s = 0
+    if target.start_time and target.end_time:
+        duration_s = (target.end_time - target.start_time) / 1_000_000_000
+
+    try:
+        chat = Chat(api_key=config.openai_api_key, model="gpt-4o-mini", base_url=config.openai_base_url)
+        summary = chat.summarize(cmd_dicts, target.primary_cwd, duration_s, fix_dicts or None)
+    except ChatError as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+    if output == "json":
+        _output_json({
+            "session_id": target.session_id,
+            "primary_cwd": target.primary_cwd,
+            "command_count": target.command_count,
+            "duration_s": round(duration_s, 1),
+            "fixes": len(all_fixes),
+            "summary": summary,
+        })
+    elif plain:
+        print(render_session_summary_plain(summary, target.primary_cwd, target.command_count, duration_s))
+    else:
+        render_session_summary(summary, target.primary_cwd, target.command_count, duration_s)
 
 
 if __name__ == "__main__":

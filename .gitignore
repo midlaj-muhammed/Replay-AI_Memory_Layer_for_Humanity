@@ -26,6 +26,9 @@ htmlcov/
 # Replay index (user-specific, don't commit)
 ~/.replay/index/
 
+# Retro context (local only)
+.context/
+
 # OS
 .DS_Store
 Thumbs.db

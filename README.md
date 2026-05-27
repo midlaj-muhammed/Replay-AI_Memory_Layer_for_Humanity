@@ -4,7 +4,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/replay-ai)](https://pypi.org/project/replay-ai/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-149%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-160%20passed-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **[Website](https://replay-ai-memory-layer-for-humanity.vercel.app)** | **[PyPI](https://pypi.org/project/replay-ai/)** | **[GitHub](https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity)**
@@ -23,109 +23,38 @@ Found 3 matches for "how did I fix Docker":
      [exit:1] docker build .
 ```
 
-## Requirements
-
-- **Python 3.10+** (tested on 3.13)
-- **[Atuin](https://atuin.sh/)** — terminal history engine (provides the data)
-- **[Jina AI API key](https://jina.ai/)** — free, for semantic embeddings (or OpenAI API key)
-
 ## Quick Start
 
-### 1. Install Atuin
-
-Atuin captures and stores your terminal history in a local SQLite database.
-
 ```bash
-# macOS
-brew install atuin
-
-# Linux (curl)
-curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh | bash
-
-# Then initialize for your shell
-atuin init zsh >> ~/.zshrc   # or bash / fish
-source ~/.zshrc
-
-# Start recording history (Atuin replaces your shell history)
-atuin sync
-```
-
-Verify Atuin is working:
-
-```bash
-atuin history list
-# You should see your recent commands
-```
-
-### 2. Install Replay
-
-```bash
-# From PyPI
 pip install replay-ai
-
-# From source (development)
-git clone https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity.git
-cd replay
-pip install -e ".[dev]"
 ```
 
-### 3. Get a Free Embedding API Key
-
-Replay uses **Jina AI** for semantic embeddings — free, fast, and no credit card required.
-
-**Option A — Jina AI (free, recommended):**
-
-1. Go to [https://jina.ai](https://jina.ai) and sign up (free)
-2. Copy your API key from the dashboard
-3. Set it:
+Set an API key (pick one):
 
 ```bash
+# Jina AI — free, recommended
 export JINA_API_KEY="jina_your-key-here"
 
-# Add to your shell profile to persist:
-echo 'export JINA_API_KEY="jina_your-key-here"' >> ~/.zshrc
-```
-
-**Option B — OpenAI (paid, also works):**
-
-```bash
+# OpenAI — also works
 export OPENAI_API_KEY="sk-your-key-here"
+
+# Or save to config file
+replay config set api_key jina_your-key-here
 ```
 
-**Option C — Config file (either provider):**
-
-```bash
-mkdir -p ~/.replay
-cat > ~/.replay/config.toml << 'EOF'
-[replay]
-openai_api_key = "your-api-key-here"
-EOF
-```
-
-### 4. Build the Index
+Build the index and search:
 
 ```bash
 replay init
+replay search "how did I fix that Docker thing"
 ```
 
-This reads your Atuin history, chunks it, filters secrets, and builds a FAISS vector index. Takes ~10-30 seconds depending on history size.
-
-```
-Embedding chunks...  246/246
-Index built: 246 chunks from 268 commands
-```
-
-### 5. Search!
+**No Atuin? No problem.** Replay reads directly from `~/.bash_history` and `~/.zsh_history` too. Atuin is optional but gives richer data (timestamps, exit codes, session IDs).
 
 ```bash
-# Semantic search
-replay search "how did I fix that Docker thing"
-replay search "nginx SSL config"
-replay search "database migration rollback"
-
-# With options
-replay search "docker build" --threshold 0.5 --limit 10
-replay search "git rebase" --plain    # no TUI, for piping
+replay init --source bash    # use bash history directly
+replay init --source zsh     # use zsh history directly
+replay init --source all     # merge all available sources
 ```
 
 ## All Commands
@@ -133,32 +62,83 @@ replay search "git rebase" --plain    # no TUI, for piping
 | Command | Description |
 |---------|-------------|
 | `replay search "query"` | Semantic search (auto-inits if needed) |
-| `replay init` | Build search index from Atuin history |
+| `replay explain <command>` | AI explains what a command does and why |
+| `replay summarize` | AI summarizes a terminal session |
+| `replay init` | Build search index from history |
 | `replay refresh` | Incremental update with new commands |
+| `replay watch` | Real-time index updates (polls for new commands) |
 | `replay list` | List all terminal sessions |
 | `replay history` | Detailed command history by session |
 | `replay fixes` | Show bug-fix patterns (failure to success) |
 | `replay stats` | Index and history statistics |
 | `replay config` | Show current configuration |
+| `replay config set <key> <value>` | Set a config value (model, api_key, base_url) |
+| `replay config models` | List available embedding models |
 | `replay export` | Export index as JSON |
 
 ### Global Options
 
 ```bash
---plain     # Plain text output (no Rich TUI, for SSH/CI/piping)
---limit -n  # Max results to show
---db        # Custom Atuin database path
+--source -s   # History source: auto, atuin, bash, zsh, all (default: auto)
+--output -o   # Output format: json (for programmatic use)
+--plain       # Plain text output (no Rich TUI, for SSH/CI/piping)
+--limit -n    # Max results to show
+--db          # Custom history file/database path
+```
+
+## AI-Powered Commands
+
+### `replay explain` — Understand any command
+
+```bash
+$ replay explain "docker build -t app --no-cache ."
+
+  explain  docker build -t app --no-cache .
+  Builds a Docker image named "app" from the current directory. The --no-cache flag
+  forces a fresh build by ignoring cached layers, useful when dependencies or base
+  images have changed. The -t flag tags the image with the name "app".
+```
+
+With context from your history:
+
+```bash
+$ replay explain "git rebase -i HEAD~3" --context
+
+  explain  git rebase -i HEAD~3
+  Starts an interactive rebase of the last 3 commits. The -i flag opens your editor
+  to reorder, squash, or edit commits. Based on your history, you've used this 12
+  times — typically after finishing a feature branch before merging.
+```
+
+### `replay summarize` — Session recap
+
+```bash
+$ replay summarize
+
+  session summary  /home/dev/api  8 cmds  15min
+  The developer was debugging a Docker networking issue. They tried building the
+  image, which failed due to a missing dependency. After installing the dependency
+  with apt, the build succeeded. They then started the container with docker compose
+  and verified it was running on port 8080.
+```
+
+### JSON output for scripting
+
+```bash
+replay search "docker" --output json | jq '.results[].command'
+replay stats --output json | jq '.index_chunks'
+replay explain "npm install" --output json | jq '.explanation'
 ```
 
 ## How It Works
 
 ```
-Atuin DB -> Reader -> Cluster -> Chunker -> Secret Filter -> Embedder -> FAISS Index
-                          |
-                    Fix Detector (metadata enrichment)
+History Sources -> Reader -> Cluster -> Chunker -> Secret Filter -> Embedder -> FAISS Index
+(bash/zsh/Atuin)                |
+                          Fix Detector (metadata enrichment)
 ```
 
-1. **Capture** -- Reads commands from Atuin's SQLite database
+1. **Capture** -- Reads commands from Atuin SQLite, `~/.bash_history`, or `~/.zsh_history`
 2. **Cluster** -- Groups commands into sessions (by Atuin session ID, 15-min gap, directory change)
 3. **Chunk** -- Structures each command: `"exit:0 | /home/dev/api | docker build -t app ."`
 4. **Filter** -- Redacts 16 types of secrets (API keys, tokens, passwords) before embedding
@@ -166,9 +146,25 @@ Atuin DB -> Reader -> Cluster -> Chunker -> Secret Filter -> Embedder -> FAISS I
 6. **Index** -- FAISS with cosine similarity, atomic writes (temp + rename)
 7. **Search** -- Embed query -> FAISS search -> threshold filter -> rank by score
 
+## Embedding Models
+
+Switch models with `replay config set model <name>`:
+
+| Model | Dimensions | Provider |
+|-------|-----------|----------|
+| `jina-embeddings-v3` | 1024 | Jina AI (free) |
+| `text-embedding-3-small` | 1536 | OpenAI |
+| `text-embedding-3-large` | 3072 | OpenAI |
+| `text-embedding-ada-002` | 1536 | OpenAI (legacy) |
+
+```bash
+replay config set model text-embedding-3-small
+replay init  # rebuild index with new model
+```
+
 ## Privacy and Security
 
-**Your data never leaves your machine** (except for the embedding API call).
+**Your data never leaves your machine** (except for embedding/API calls).
 
 - Index stored locally at `~/.replay/index/`
 - 16 secret patterns redacted before embedding:
@@ -177,50 +173,20 @@ Atuin DB -> Reader -> Cluster -> Chunker -> Secret Filter -> Embedder -> FAISS I
   - Bearer tokens, `password=`, `passwd=`, `PASS=`, `SECRET=`, `API_KEY=`
   - Authorization headers, long hex/base64 strings
 - Config file stores API key locally at `~/.replay/config.toml`
+- Secrets redacted before AI explain/summarize commands too
 - No telemetry, no analytics, no cloud storage
-
-## Demo: Fix Detection
-
-```bash
-$ replay fixes --plain
-
-Found 3 fix patterns:
-
-  1. 'docker build -t webapp .' failed, then 'sudo docker build -t webapp .' succeeded
-     FAILED: exit:1 | /home/dev/webapp | docker build -t webapp .
-     FIXED:   exit:0 | /home/dev/webapp | sudo docker build -t webapp .
-
-  2. 'docker compose up' failed, then 'sudo docker compose up -d' succeeded
-     FAILED: exit:1 | /home/dev | docker compose up
-     FIXED:   exit:0 | /home/dev | sudo docker compose up -d
-```
-
-## Stats
-
-```bash
-$ replay stats --plain
-
-Replay Stats
-========================================
-  Commands:     268
-  Sessions:     212
-  Fixes found:  18
-  Index chunks: 246
-  Index size:   5.8 MB
-```
 
 ## Development
 
 ```bash
-# Clone and install
 git clone https://github.com/midlaj-muhammed/Replay-AI_Memory_Layer_for_Humanity.git
 cd Replay-AI_Memory_Layer_for_Humanity/replay
-python3.13 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Run tests
 pytest -q
-# 149 passed in 0.96s
+# 160 passed in 0.80s
 
 # Run with coverage
 pytest --cov=replay --cov-report=term-missing
@@ -232,6 +198,7 @@ pytest --cov=replay --cov-report=term-missing
 replay/
 +-- capture/
 |   +-- atuin.py          # Atuin SQLite reader
+|   +-- bash.py           # Bash/zsh history reader + unified dispatcher
 +-- processing/
 |   +-- cluster.py        # Session clustering
 |   +-- chunker.py        # Structured chunk format
@@ -241,10 +208,11 @@ replay/
 |   +-- embedder.py       # Jina AI embeddings (batched)
 |   +-- index.py          # FAISS index + JSON sidecar
 |   +-- query.py          # Semantic search orchestration
+|   +-- chat.py           # AI-powered explain/summarize
 +-- display/
 |   +-- tui.py            # Rich TUI output
 |   +-- plain.py          # Plain text (--plain)
-+-- cli.py                # 9 Typer commands
++-- cli.py                # 12 Typer commands
 +-- config.py             # Config loading (TOML + env)
 ```
 

@@ -124,3 +124,25 @@ def _format_timestamp(ts_ns: int) -> str:
     ts_s = ts_ns / 1_000_000_000
     dt = datetime.fromtimestamp(ts_s, tz=timezone.utc)
     return dt.strftime("%Y-%m-%d %H:%M")
+
+
+def render_explanation_plain(command: str, explanation: str, exit_status: int = 0) -> str:
+    """Plain text explanation of a command."""
+    lines = [f"Explain: {command}"]
+    if exit_status != 0:
+        lines.append(f"Exit status: {exit_status}")
+    lines.append("")
+    lines.append(explanation)
+    return "\n".join(lines)
+
+
+def render_session_summary_plain(summary: str, primary_cwd: str = "", command_count: int = 0, duration_s: float = 0) -> str:
+    """Plain text session summary."""
+    header = "Session summary"
+    if primary_cwd:
+        header += f" ({primary_cwd})"
+    if command_count:
+        header += f" - {command_count} commands"
+    if duration_s:
+        header += f" - {duration_s/60:.0f}min"
+    return f"{header}\n\n{summary}"
