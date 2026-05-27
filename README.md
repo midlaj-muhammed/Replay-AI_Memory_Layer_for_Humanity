@@ -275,9 +275,13 @@ replay/
 +-- config.py             # Config loading (TOML + env)
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and how to submit changes.
+
 ## License
 
-MIT
+[MIT](LICENSE)
 
 ---
 
